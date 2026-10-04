@@ -16,7 +16,45 @@
 <form method="POST">
   <p>
     <label for="name">避難所名（必須）</label><br>
-    <input type="text" id="name" name="name">
+    <input type="text" id="name" name="name" required>
+  </p>
+  <p>
+    <label for="address">住所（必須）</label><br>
+    <input type="text" id="address" name="address" autocomplete="street-address" required>
+  </p>
+  <p>
+    <label for="opening_status">開設状況（必須）</label><br>
+    <select id="opening_status" name="opening_status" required>
+      <option value="">選択してください</option>
+      <option value="開設中">開設中</option>
+      <option value="未開設">未開設</option>
+    </select>
+  </p>
+  <p>
+    <label for="capacity">収容人数（必須・人）</label><br>
+    <input type="number" id="capacity" name="capacity" min="1" step="1" required>
+  </p>
+  <p>
+    <label for="current_evacuees">現在の避難者数（必須・人）</label><br>
+    <input type="number" id="current_evacuees" name="current_evacuees" min="0" step="1" required>
+  </p>
+  <p>
+    <label for="pet_friendly">ペット受け入れ（必須）</label><br>
+    <select id="pet_friendly" name="pet_friendly" required>
+      <option value="">選択してください</option>
+      <option value="yes">可</option>
+      <option value="no">不可</option>
+      <option value="unknown">未確認</option>
+    </select>
+  </p>
+  <p>
+    <label for="barrier_free">バリアフリー設備（必須）</label><br>
+    <select id="barrier_free" name="barrier_free" required>
+      <option value="">選択してください</option>
+      <option value="yes">あり</option>
+      <option value="no">なし</option>
+      <option value="unknown">未確認</option>
+    </select>
   </p>
   <p><button type="submit">登録</button></p>
 </form>

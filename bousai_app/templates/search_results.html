@@ -1,20 +1,143 @@
 {% extends "base.html" %}
 
+{% block head %}
+<style>
+  .availability-badge {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .availability-available {
+    color: #17603a;
+    background: #e2f5e9;
+  }
+  .availability-full {
+    color: #8b1e1e;
+    background: #fde8e7;
+  }
+  .availability-unknown {
+    color: #536273;
+    background: #e9edf2;
+  }
+  .facility-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 7px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .facility-yes {
+    color: #17603a;
+    background: #e2f5e9;
+  }
+  .facility-no {
+    color: #536273;
+    background: #e9edf2;
+  }
+  .facility-unknown {
+    color: #725b22;
+    background: #fff3d5;
+  }
+  .shelter-results {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+  }
+  .shelter-results th,
+  .shelter-results td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #dce3eb;
+  }
+  .shelter-results th {
+    background: #eef3f9;
+  }
+  .no-results {
+    margin: 24px 0;
+    padding: 24px;
+    border: 1px solid #d8e2ee;
+    border-radius: 12px;
+    background: #fff;
+    text-align: center;
+  }
+  .no-results h3 {
+    margin: 0 0 8px;
+    color: #344254;
+  }
+  .no-results p {
+    margin: 0 0 18px;
+    color: #536273;
+  }
+  .search-again {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 8px;
+    color: #fff;
+    background: #2856a4;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .search-again:hover,
+  .search-again:focus-visible {
+    background: #1e4384;
+    text-decoration: underline;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <h2>検索結果</h2>
 
 {% if results %}
-  <ul>
-    {% for shelter in results %}
-    <li>{{ shelter.name }}</li>
-    {% endfor %}
-  </ul>
+  <p>空き状況：緑＝空きあり、赤＝満員、灰＝未登録。設備：緑＝あり、灰＝なし、黄＝未確認</p>
+  <div style="overflow-x: auto;">
+    <table class="shelter-results">
+      <caption>避難所の検索結果</caption>
+      <thead>
+        <tr>
+          <th scope="col">避難所名</th>
+          <th scope="col">住所</th>
+          <th scope="col">開設状況</th>
+          <th scope="col">収容人数</th>
+          <th scope="col">現在の避難者数</th>
+          <th scope="col">空き状況</th>
+          <th scope="col">ペット受け入れ</th>
+          <th scope="col">バリアフリー設備</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for shelter in results %}
+        <tr>
+          <td>{{ shelter.name }}</td>
+          <td>{{ shelter.address or '未登録' }}</td>
+          <td>{{ shelter.opening_status or '未登録' }}</td>
+          <td>{{ shelter.display_capacity ~ '人' if shelter.display_capacity is not none else '未登録' }}</td>
+          <td>{{ shelter.display_evacuees ~ '人' if shelter.display_evacuees is not none else '未登録' }}</td>
+          <td><span class="availability-badge availability-{{ shelter.availability_class }}">{{ shelter.availability_label }}</span></td>
+          <td>
+            <span class="facility-badge facility-{{ shelter.pet_friendly_class }}">
+              <span aria-hidden="true">🐾</span>{{ shelter.pet_friendly_label }}
+            </span>
+          </td>
+          <td>
+            <span class="facility-badge facility-{{ shelter.barrier_free_class }}">
+              <span aria-hidden="true">♿</span>{{ shelter.barrier_free_label }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 {% else %}
-  <p>該当する避難所が見つかりませんでした</p>
+  <section class="no-results" role="status" aria-live="polite">
+    <h3>条件に合う避難所がありません</h3>
+    <p>検索条件を変更して、もう一度お試しください。</p>
+    <a class="search-again" href="{{ url_for('shelter_search') }}">条件を変えて再検索</a>
+  </section>
 {% endif %}
 
-<p>
-  <a href="/shelter_search">検索画面に戻る</a> |
-  <a href="/">トップページへ戻る</a>
-</p>
 {% endblock %}

@@ -153,6 +153,42 @@ def filter_shelters(district=None):
     return [s for s in shelters if not district or s.get('district') == district]
 
 
+def prepare_shelter_results(results):
+    """一覧表示用に、定員と避難者数から空き状況を作成する"""
+    prepared = []
+    for shelter in results:
+        item = dict(shelter)
+        capacity = shelter.get('capacity')
+        evacuees = shelter.get('current_evacuees')
+        item['display_capacity'] = capacity if type(capacity) is int and capacity > 0 else None
+        item['display_evacuees'] = evacuees if type(evacuees) is int and evacuees >= 0 else None
+
+        if item['display_capacity'] is None or item['display_evacuees'] is None:
+            item['availability_label'] = '未登録'
+            item['availability_class'] = 'unknown'
+        elif evacuees >= capacity:
+            item['availability_label'] = '満員（定員超過）' if evacuees > capacity else '満員'
+            item['availability_class'] = 'full'
+        else:
+            item['availability_label'] = f'空きあり（残り{capacity - evacuees}人）'
+            item['availability_class'] = 'available'
+
+        for field in ('pet_friendly', 'barrier_free'):
+            value = shelter.get(field)
+            if value is True:
+                item[f'{field}_label'] = 'あり'
+                item[f'{field}_class'] = 'yes'
+            elif value is False:
+                item[f'{field}_label'] = 'なし'
+                item[f'{field}_class'] = 'no'
+            else:
+                item[f'{field}_label'] = '未登録'
+                item[f'{field}_class'] = 'unknown'
+
+        prepared.append(item)
+    return prepared
+
+
 def parse_area_warnings(warning_data):
     """気象庁の新形式JSONから対象市区町村の最新状態を抽出する"""
     if not isinstance(warning_data, list):
@@ -312,13 +348,41 @@ def logout():
 def shelter_register():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        address = request.form.get('address', '').strip()
+        opening_status = request.form.get('opening_status', '').strip()
+        capacity_value = request.form.get('capacity', '').strip()
+        evacuees_value = request.form.get('current_evacuees', '').strip()
+        pet_friendly_value = request.form.get('pet_friendly', '')
+        barrier_free_value = request.form.get('barrier_free', '')
         if not name:
             return render_template('shelter_register.html', error=True, message='避難所名を入力してください。')
+        if not address:
+            return render_template('shelter_register.html', error=True, message='住所を入力してください。')
+        if opening_status not in ('開設中', '未開設'):
+            return render_template('shelter_register.html', error=True, message='開設状況を選択してください。')
+        facility_values = {'yes': True, 'no': False, 'unknown': None}
+        if pet_friendly_value not in facility_values or barrier_free_value not in facility_values:
+            return render_template('shelter_register.html', error=True, message='ペット可とバリアフリーの状況を選択してください。')
+        try:
+            capacity = int(capacity_value)
+            current_evacuees = int(evacuees_value)
+        except ValueError:
+            return render_template('shelter_register.html', error=True, message='収容人数と現在の避難者数は整数で入力してください。')
+        if capacity <= 0:
+            return render_template('shelter_register.html', error=True, message='収容人数は1人以上で入力してください。')
+        if current_evacuees < 0:
+            return render_template('shelter_register.html', error=True, message='現在の避難者数は0人以上で入力してください。')
 
         new_id = max((s.get('id', 0) for s in shelters), default=0) + 1
         shelters.append({
             'id': new_id,
             'name': name,
+            'address': address,
+            'opening_status': opening_status,
+            'capacity': capacity,
+            'current_evacuees': current_evacuees,
+            'pet_friendly': facility_values[pet_friendly_value],
+            'barrier_free': facility_values[barrier_free_value],
         })
         save_shelters()
         return render_template('shelter_register.html', success=True, message='避難所を登録しました。')
@@ -333,7 +397,7 @@ def shelter_search():
 # 全施設一覧ページ
 @app.route('/all_shelters')
 def all_shelters():
-    return render_template('search_results.html', results=shelters)
+    return render_template('search_results.html', results=prepare_shelter_results(shelters))
 
 
 # 指示ボード：住民向けの指示を一覧で確認する
@@ -347,7 +411,7 @@ def board():
 @app.route('/search_results')
 def search_results():
     results = filter_shelters(request.args.get('district'))
-    return render_template('search_results.html', results=results)
+    return render_template('search_results.html', results=prepare_shelter_results(results))
 
 # JSON API：/shelters?district=地区名
 @app.route('/shelters', methods=['GET'])

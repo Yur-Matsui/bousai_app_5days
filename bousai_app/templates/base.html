@@ -22,6 +22,7 @@
       min-width: 320px;
       min-height: 100vh;
       margin: 0;
+      padding-bottom: 82px;
       background: linear-gradient(135deg, #fbfcfe 0%, #f4f7fb 100%);
     }
 
@@ -106,6 +107,47 @@
       margin: 32px auto 72px;
     }
 
+    .page-actions {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 950;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px 20px max(12px, env(safe-area-inset-bottom));
+      border-top: 1px solid #dce3eb;
+      background: rgb(255 255 255 / 97%);
+      box-shadow: 0 -3px 12px rgb(26 54 93 / 10%);
+    }
+
+    .page-action {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 18px;
+      border: 1px solid #2856a4;
+      border-radius: 8px;
+      color: #2856a4;
+      background: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .page-action-primary {
+      color: #fff;
+      background: #2856a4;
+    }
+
+    .page-action:hover,
+    .page-action:focus-visible {
+      outline: 3px solid rgb(40 86 164 / 25%);
+      outline-offset: 2px;
+    }
+
     @media (max-width: 600px) {
       .header-inner {
         width: calc(100% - 32px);
@@ -130,6 +172,18 @@
       main {
         width: calc(100% - 28px);
         margin-top: 20px;
+      }
+
+      .page-actions {
+        gap: 8px;
+        padding-right: 14px;
+        padding-left: 14px;
+      }
+
+      .page-action {
+        flex: 1 1 0;
+        padding: 9px 10px;
+        font-size: 14px;
       }
     }
   </style>
@@ -160,5 +214,9 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+  <nav class="page-actions" aria-label="ページ移動">
+    <a class="page-action page-action-primary" href="{{ url_for('shelter_search') }}">避難所検索へ戻る</a>
+    <a class="page-action" href="{{ url_for('index') }}">トップページへ戻る</a>
+  </nav>
 </body>
 </html>
