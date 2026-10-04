@@ -4,30 +4,160 @@
   <meta charset="utf-8">
   <title>{% block title %}防災アプリ{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+      color: #344254;
+      background: #f7f9fc;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #fbfcfe 0%, #f4f7fb 100%);
+    }
+
+    .site-header {
+      position: relative;
+      z-index: 1000;
+      height: 70px;
+      color: #fff;
+      background: #2856a4;
+      box-shadow: 0 2px 8px rgb(26 54 93 / 18%);
+    }
+
+    .header-inner {
+      display: flex;
+      width: min(100% - 48px, 1380px);
+      height: 100%;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 auto;
+    }
+
+    .brand {
+      margin: 0;
+      color: inherit;
+      font-size: 24px;
+      font-weight: 750;
+      letter-spacing: 0.04em;
+    }
+
+    .site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 900;
+      display: flex;
+      min-height: 54px;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 6px max(24px, calc((100vw - 1380px) / 2));
+      border-bottom: 1px solid #e5eaf1;
+      background: rgb(255 255 255 / 96%);
+      box-shadow: 0 3px 10px rgb(26 54 93 / 5%);
+      scrollbar-width: thin;
+    }
+
+    .site-nav a,
+    .nav-session {
+      flex: 0 0 auto;
+      padding: 9px 13px;
+      border-radius: 8px;
+      color: #344254;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    .site-nav a:hover,
+    .site-nav a:focus-visible {
+      color: #2456a5;
+      background: #f0f5fd;
+    }
+
+    .site-nav a[aria-current="page"] {
+      color: #2456a5;
+      background: #eaf1fc;
+      font-weight: 700;
+    }
+
+    .nav-session {
+      margin-left: auto;
+      color: #68778a;
+      white-space: nowrap;
+    }
+
+    .nav-session a {
+      margin-left: 8px;
+      padding: 0;
+      color: #2456a5;
+    }
+
+    main {
+      width: min(100% - 40px, 910px);
+      margin: 32px auto 72px;
+    }
+
+    @media (max-width: 600px) {
+      .header-inner {
+        width: calc(100% - 32px);
+      }
+
+      .brand {
+        font-size: 21px;
+      }
+
+      .site-nav {
+        gap: 2px;
+        padding-right: 14px;
+        padding-left: 14px;
+      }
+
+      .site-nav a,
+      .nav-session {
+        padding: 9px 10px;
+        font-size: 13px;
+      }
+
+      main {
+        width: calc(100% - 28px);
+        margin-top: 20px;
+      }
+    }
+  </style>
+  {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- ヘッダー -->
-  <h1>防災アプリ</h1>
-
-  <!-- ナビゲーション -->
-  <nav>
-    <a href="/">ホーム</a> |
-    <a href="/shelter_search">避難所検索</a> |
-    <a href="/shelter_register">避難所登録</a> |
-    <a href="/board">指示・発信ボード</a>
-    ｜
-    {% if session.logged_in %}
-      ログイン中{% if session.username %}（{{ session.username }}）{% endif %}
-      <a href="/logout">ログアウト</a>
-    {% else %}
-      未ログイン
-      <a href="/login">ログイン</a>
-    {% endif %}
+  <header class="site-header">
+    <div class="header-inner">
+      <h1 class="brand">防災アプリ</h1>
+    </div>
+  </header>
+  <nav class="site-nav" aria-label="メインメニュー">
+    <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>ホーム</a>
+    <a href="/shelter_search" {% if request.path == '/shelter_search' %}aria-current="page"{% endif %}>避難所検索</a>
+    <a href="/shelter_register" {% if request.path == '/shelter_register' %}aria-current="page"{% endif %}>避難所登録</a>
+    <a href="/board" {% if request.path == '/board' %}aria-current="page"{% endif %}>発信ボード</a>
+    <div class="nav-session">
+      {% if session.logged_in %}
+        ログイン中{% if session.username %}（{{ session.username }}）{% endif %}
+        <a href="/logout">ログアウト</a>
+      {% else %}
+        未ログイン
+        <a href="/login">ログイン</a>
+      {% endif %}
+    </div>
   </nav>
-  <hr>
 
   <main>
-    <!-- ここに子テンプレートの content が入る -->
     {% block content %}{% endblock %}
   </main>
 </body>
