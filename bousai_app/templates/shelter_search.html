@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>避難所検索</h2>
-<p>登録されている避難所を確認できます。</p>
+{% block title %}避難所検索 - 防災アプリ{% endblock %}
 
-<p><a href="/all_shelters">全施設一覧</a></p>
+{% block content %}
+<section style="max-width: 760px; margin: 0 auto;">
+  <h2>避難所検索</h2>
+  {% include "_shelter_search_form.html" %}
+  <p class="facility-count">{{ facility_count }}施設</p>
+  <p><a class="all-facilities-link" href="{{ url_for('all_shelters') }}">全施設一覧</a></p>
+</section>
 {% endblock %}

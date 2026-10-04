@@ -1,0 +1,248 @@
+<style>
+  .shelter-search-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    padding: 22px;
+    border: 1px solid #e4eaf1;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 22px rgb(39 67 105 / 5%);
+  }
+  .shelter-search-form .field {
+    min-width: 0;
+  }
+  .shelter-search-form label,
+  .field-label {
+    display: block;
+    margin-bottom: 6px;
+    color: #334a63;
+    font-weight: 700;
+  }
+  .shelter-search-form input[type="search"],
+  .shelter-search-form select {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid #b8c4d2;
+    border-radius: 8px;
+    color: #334a63;
+    background: #fff;
+    font: inherit;
+  }
+  .shelter-search-form :focus-visible,
+  .shelter-search-button:focus-visible,
+  .location-button:focus-visible,
+  .clear-location-button:focus-visible {
+    outline: 3px solid rgb(45 92 166 / 30%);
+    outline-offset: 2px;
+  }
+  .shelter-search-form .field-wide {
+    grid-column: 1 / -1;
+  }
+  .search-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+  }
+  .search-checks label {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-weight: 500;
+  }
+  .search-checks input {
+    width: 20px;
+    height: 20px;
+  }
+  .search-explanation {
+    margin: 0;
+    color: #607186;
+  }
+  .shelter-search-button,
+  .location-button,
+  .clear-location-button {
+    display: inline-flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 18px;
+    border: 1px solid #2d5ca6;
+    border-radius: 8px;
+    color: #fff;
+    background: #2d5ca6;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .shelter-search-button:hover,
+  .location-button:hover {
+    background: #234d8d;
+  }
+  .clear-location-button {
+    color: #2d5ca6;
+    background: #fff;
+  }
+  .location-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .location-status {
+    min-height: 1.5em;
+    margin: 8px 0 0;
+    color: #607186;
+  }
+  .facility-count {
+    margin: 14px 0;
+    color: #334a63;
+    font-weight: 700;
+  }
+  .all-facilities-link {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    color: #2d5ca6;
+    font-weight: 700;
+  }
+  .search-again {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    color: #2d5ca6;
+    font-weight: 700;
+  }
+  @media (max-width: 680px) {
+    .shelter-search-form {
+      grid-template-columns: 1fr;
+      padding: 16px;
+    }
+    .shelter-search-form .field-wide {
+      grid-column: auto;
+    }
+    .shelter-search-button,
+    .location-button,
+    .clear-location-button {
+      width: 100%;
+    }
+    .location-controls {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
+</style>
+
+<form class="shelter-search-form" method="get" action="{{ url_for('search_results') }}">
+  <div class="field">
+    <label for="keyword">キーワード</label>
+    <input type="search" id="keyword" name="keyword" value="{{ conditions.keyword }}" placeholder="例：御所見小学校">
+  </div>
+  <div class="field">
+    <label for="disaster">災害の種類</label>
+    <select id="disaster" name="disaster">
+      <option value="">指定なし</option>
+      {% for code, label in disaster_types.items() %}
+        <option value="{{ code }}" {% if conditions.disaster == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="district">地区</label>
+    <select id="district" name="district">
+      <option value="">すべての地区</option>
+      {% if districts %}
+        {% for district in districts %}
+          <option value="{{ district }}" {% if conditions.district == district %}selected{% endif %}>{{ district }}</option>
+        {% endfor %}
+      {% else %}
+        <option value="" disabled>地区情報が登録されていません</option>
+      {% endif %}
+    </select>
+  </div>
+
+  <fieldset class="field field-wide" style="border: 0; padding: 0; margin: 0;">
+    <legend class="field-label">必要な対応</legend>
+    <div class="search-checks">
+      <label><input type="checkbox" name="pets" {% if conditions.pets %}checked{% endif %}>ペット同伴可</label>
+      <label><input type="checkbox" name="barrier_free" {% if conditions.barrier_free %}checked{% endif %}>バリアフリー</label>
+      <label><input type="checkbox" name="wheelchair" {% if conditions.wheelchair %}checked{% endif %}>車いす対応</label>
+    </div>
+  </fieldset>
+
+  <div class="field field-wide">
+    <label for="radius">現在地から探す範囲</label>
+    <div class="location-controls">
+      <select id="radius" name="radius">
+        {% for radius in (5, 10, 20, 50) %}
+          <option value="{{ radius }}" {% if conditions.radius == radius %}selected{% endif %}>{{ radius }} km</option>
+        {% endfor %}
+      </select>
+      <button class="location-button" type="button" id="useCurrentLocation">現在地から検索</button>
+      {% if conditions.latitude and conditions.longitude %}
+        <button class="clear-location-button" type="button" id="clearCurrentLocation">現在地条件を解除</button>
+      {% endif %}
+    </div>
+    <input type="hidden" name="latitude" id="searchLatitude" value="{{ conditions.latitude }}">
+    <input type="hidden" name="longitude" id="searchLongitude" value="{{ conditions.longitude }}">
+    <p class="location-status" id="locationStatus" role="status" aria-live="polite">{% if conditions.latitude and conditions.longitude %}現在地条件を指定中です。{% endif %}</p>
+  </div>
+
+  <p class="field-wide search-explanation">条件を指定した場合、確認済み情報が一致する避難所だけを表示します。</p>
+  <div class="field-wide">
+    <button class="shelter-search-button" type="submit">条件で検索</button>
+  </div>
+</form>
+
+<script>
+  (() => {
+    const form = document.currentScript.previousElementSibling;
+    const locationButton = form.querySelector('#useCurrentLocation');
+    const clearButton = form.querySelector('#clearCurrentLocation');
+    const latitudeInput = form.querySelector('#searchLatitude');
+    const longitudeInput = form.querySelector('#searchLongitude');
+    const status = form.querySelector('#locationStatus');
+
+    if (locationButton) {
+      locationButton.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          status.textContent = 'このブラウザーでは現在地を取得できません。施設名や住所で検索してください。';
+          return;
+        }
+        locationButton.disabled = true;
+        status.textContent = '現在地を取得しています。';
+        try {
+          navigator.geolocation.getCurrentPosition((position) => {
+            latitudeInput.value = String(position.coords.latitude);
+            longitudeInput.value = String(position.coords.longitude);
+            status.textContent = '現在地を取得しました。選択した範囲と条件で検索します。';
+            locationButton.disabled = false;
+            form.requestSubmit();
+          }, (error) => {
+            const messages = {
+              1: '位置情報の利用が許可されませんでした。',
+              2: '現在地を取得できませんでした。',
+              3: '現在地の取得がタイムアウトしました。'
+            };
+            status.textContent = `${messages[error.code] || '現在地の取得に失敗しました。'}施設名や住所で検索してください。`;
+            locationButton.disabled = false;
+          }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+        } catch (error) {
+          status.textContent = `現在地を取得できませんでした。${error.message || 'ブラウザーの位置情報を利用できません。'}施設名や住所で検索してください。`;
+          locationButton.disabled = false;
+        }
+      });
+    }
+
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        latitudeInput.value = '';
+        longitudeInput.value = '';
+        form.requestSubmit();
+      });
+    }
+  })();
+</script>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}発信内容の確認 - 防災アプリ{% endblock %}
+
+{% block content %}
+<h2>住民向け情報の確認</h2>
+<p>内容を確認してから発信してください。</p>
+
+{% if error_message %}
+  <p role="alert">{{ error_message }}</p>
+{% endif %}
+
+<dl>
+  <dt>対象地区</dt>
+  <dd>{{ instruction.district or '未設定' }}</dd>
+  <dt>緊急度</dt>
+  <dd>{{ instruction.priority or '未設定' }}</dd>
+  <dt>避難先</dt>
+  <dd>{{ instruction.shelter or '指定なし' }}</dd>
+  <dt>内容</dt>
+  <dd><p style="white-space: pre-wrap;">{{ instruction.content or '未登録' }}</p></dd>
+  <dt>やさしい日本語での内容</dt>
+  <dd><p style="white-space: pre-wrap;">{{ instruction.easy_content or '登録されていません' }}</p></dd>
+</dl>
+
+{% if instruction.published_at %}
+  <p role="status">発信済みです（{{ instruction.published_at }}）。発信日時は変更されません。</p>
+{% else %}
+  <form method="post" action="{{ url_for('publish_instruction', instruction_id=instruction.id) }}">
+    <button type="submit">この内容を発信する</button>
+  </form>
+{% endif %}
+<p><a href="{{ url_for('board') }}">指示・発信ボードへ戻る</a></p>
+{% endblock %}

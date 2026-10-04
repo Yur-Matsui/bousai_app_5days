@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}発信履歴 - 防災アプリ{% endblock %}
+
+{% block content %}
+<h2>発信履歴</h2>
+{% if history %}
+  <ol>
+    {% for item in history %}
+      <li>
+        <article>
+          <h3>{{ item.district or '未設定' }}（{{ item.priority or '緊急度未設定' }}）</h3>
+          <p>発信日時: <time>{{ display_time(item.published_at) }}</time></p>
+          <p style="white-space: pre-wrap;">{{ item.content or '未登録' }}</p>
+          <p>避難先: {{ item.shelter or '指定なし' }}</p>
+        </article>
+      </li>
+    {% endfor %}
+  </ol>
+{% else %}
+  <p>発信履歴はありません。</p>
+{% endif %}
+<p><a href="{{ url_for('board') }}">指示・発信ボードへ戻る</a></p>
+{% endblock %}

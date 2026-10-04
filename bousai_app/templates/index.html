@@ -145,6 +145,42 @@
     font-size: 13px;
   }
 
+  .notice-card {
+    margin: 14px 0;
+    padding: 16px;
+    border: 1px solid #f4c6bd;
+    border-radius: 10px;
+    background: #fff8f6;
+  }
+
+  .notice-card.is-large {
+    font-size: 1.25em;
+  }
+
+  .notice-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 12px 0;
+  }
+
+  .notice-controls button {
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid #2856a4;
+    border-radius: 7px;
+    color: #2856a4;
+    background: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .notice-controls button:focus-visible {
+    outline: 3px solid rgb(40 86 164 / 30%);
+    outline-offset: 2px;
+  }
+
   @media (max-width: 600px) {
     .home-card {
       padding: 18px;
@@ -194,6 +230,28 @@
 {% endblock %}
 
 {% block content %}
+{% if resident_notices %}
+<section class="home-card" aria-labelledby="noticeTitle">
+  <h2 class="card-heading" id="noticeTitle">緊急のお知らせ</h2>
+  <div class="notice-controls">
+    <button type="button" id="languageToggle" aria-pressed="false">やさしい日本語で表示</button>
+    <button type="button" id="fontSizeToggle" aria-pressed="false">文字を大きくする</button>
+  </div>
+  <div id="noticeList" aria-live="polite">
+    {% for notice in resident_notices %}
+      <article class="notice-card">
+        <h3>{{ notice.district or '地区未設定' }}{% if notice.priority %}（緊急度: {{ notice.priority }}）{% endif %}</h3>
+        <p>発信日時: <time>{{ display_time(notice.published_at) }}</time></p>
+        <p>避難先: {{ notice.shelter or '指定なし' }}</p>
+        <p class="notice-standard" style="white-space: pre-wrap;">{{ notice.content or '未登録' }}</p>
+        <p class="notice-easy" style="white-space: pre-wrap;" hidden>{{ notice.easy_content or '' }}</p>
+        <p class="notice-easy-missing" hidden>やさしい日本語での内容は登録されていません。通常の内容を確認してください。</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="home-card" aria-labelledby="mapTitle">
   <h2 class="card-heading" id="mapTitle">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -235,7 +293,35 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const map = L.map('shelterMap').setView([35.339, 139.4903], 12);
+      const noticeList = document.querySelector('#noticeList');
+      const languageToggle = document.querySelector('#languageToggle');
+      const fontSizeToggle = document.querySelector('#fontSizeToggle');
+      if (noticeList && languageToggle && fontSizeToggle) {
+        let showingEasyJapanese = false;
+        languageToggle.addEventListener('click', () => {
+          showingEasyJapanese = !showingEasyJapanese;
+          languageToggle.setAttribute('aria-pressed', String(showingEasyJapanese));
+          languageToggle.textContent = showingEasyJapanese
+            ? '通常の日本語で表示'
+            : 'やさしい日本語で表示';
+          noticeList.querySelectorAll('.notice-card').forEach((card) => {
+            const standard = card.querySelector('.notice-standard');
+            const easy = card.querySelector('.notice-easy');
+            const missing = card.querySelector('.notice-easy-missing');
+            standard.hidden = showingEasyJapanese;
+            easy.hidden = !showingEasyJapanese || !easy.textContent.trim();
+            missing.hidden = !showingEasyJapanese || Boolean(easy.textContent.trim());
+          });
+        });
+
+        fontSizeToggle.addEventListener('click', () => {
+          const isLarge = noticeList.classList.toggle('is-large');
+          fontSizeToggle.setAttribute('aria-pressed', String(isLarge));
+          fontSizeToggle.textContent = isLarge ? '文字を元の大きさに戻す' : '文字を大きくする';
+        });
+      }
+
+      const map = L.map('shelterMap').setView([35.339, 139.4903], 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',

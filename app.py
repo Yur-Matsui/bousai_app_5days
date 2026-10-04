@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template, session, redirect, u
 from urllib.parse import urlparse, urljoin
 from functools import wraps
 import json
+import math
 import os
 import urllib.request
 import urllib.error
@@ -96,11 +97,8 @@ instructions = load_json(INSTRUCTIONS_FILE, [])
 
 def save_instructions():
     """指示ボードのデータをファイルに保存する"""
-    try:
-        with open(INSTRUCTIONS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(instructions, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    with open(INSTRUCTIONS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(instructions, f, ensure_ascii=False, indent=2)
 
 
 def save_shelters():
@@ -135,6 +133,67 @@ def get_japan_time():
     return datetime.now(JST).strftime("%Y年%m月%d日 %H:%M")
 
 
+INSTRUCTION_TARGETS = ('住民', '職員', '道路管理課')
+INSTRUCTION_DISTRICTS = (
+    '片瀬', '鵠沼', '辻堂', '村岡', '藤沢', '明治', '善行',
+    '六会', '湘南大庭', '湘南台', '長後', '遠藤', '御所見',
+)
+INSTRUCTION_PRIORITIES = ('高', '中', '低')
+INSTRUCTION_STATUSES = ('未対応', '完了')
+
+
+def instruction_datetime_key(value):
+    """指示日時を並び替え可能な日時へ変換する。旧形式・不正値は最古として扱う。"""
+    if not isinstance(value, str) or not value:
+        return datetime.min.replace(tzinfo=JST)
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        try:
+            parsed = datetime.strptime(value, "%Y年%m月%d日 %H:%M")
+        except ValueError:
+            return datetime.min.replace(tzinfo=JST)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=JST)
+    return parsed.astimezone(JST)
+
+
+def display_instruction_time(value):
+    if not value:
+        return '未登録'
+    parsed = instruction_datetime_key(value)
+    if parsed == datetime.min.replace(tzinfo=JST):
+        return value
+    return parsed.strftime("%Y年%m月%d日 %H:%M")
+
+
+def get_instruction_status(instruction):
+    """旧形式の状態を画面上で対応状況に正規化する。"""
+    return '完了' if instruction.get('status') == '完了' else '未対応'
+
+
+def get_public_notices():
+    """発信済みの住民向け情報のみを発信日時の新しい順で返す。"""
+    return sorted(
+        (
+            item for item in instructions
+            if item.get('target') == '住民' and item.get('published_at')
+        ),
+        key=lambda item: instruction_datetime_key(item.get('published_at')),
+        reverse=True,
+    )
+
+
+def save_instruction_changes(previous):
+    """保存に失敗した変更をメモリ上でも取り消し、失敗を呼び出し元へ伝える。"""
+    try:
+        save_instructions()
+    except OSError:
+        instructions[:] = previous
+        app.logger.exception("指示データの保存に失敗しました")
+        raise
+
+
 def format_report_time(iso_str):
     """気象庁の発表時刻（ISO形式）をJSTの表示用文字列に変換する"""
     if not iso_str:
@@ -151,6 +210,145 @@ def format_report_time(iso_str):
 def filter_shelters(district=None):
     """district 指定があれば一致する避難所のみ、なければ全件を返す"""
     return [s for s in shelters if not district or s.get('district') == district]
+
+
+DISASTER_TYPES = {
+    'earthquake': '地震',
+    'flood': '洪水・浸水',
+    'landslide': '土砂災害',
+    'tsunami': '津波',
+    'storm_surge': '高潮',
+    'large_fire': '大規模火災',
+}
+SEARCH_RADII = (5, 10, 20, 50)
+
+
+def valid_coordinates(latitude, longitude):
+    try:
+        lat = float(latitude)
+        lon = float(longitude)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(lat) or not math.isfinite(lon):
+        return None
+    if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+        return None
+    return lat, lon
+
+
+def haversine_km(first, second):
+    """2点間の球面距離をキロメートルで返す。"""
+    lat1, lon1 = map(math.radians, first)
+    lat2, lon2 = map(math.radians, second)
+    delta_lat = lat2 - lat1
+    delta_lon = lon2 - lon1
+    hav = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    )
+    return 6371.0088 * 2 * math.asin(math.sqrt(min(1.0, hav)))
+
+
+def shelter_districts():
+    return sorted({
+        item.get('district').strip()
+        for item in shelters
+        if isinstance(item.get('district'), str) and item.get('district').strip()
+    })
+
+
+def shelter_equipment_value(shelter, field):
+    # pet_friendly は以前の登録画面で利用していた同義のデータ項目。
+    if field == 'pets_allowed' and field not in shelter:
+        return shelter.get('pet_friendly')
+    return shelter.get(field)
+
+
+def filter_shelter_search(params, all_facilities=False):
+    """検索条件を検証し、避難所と画面表示用条件を返す。"""
+    conditions = {
+        'keyword': params.get('keyword', '').strip(),
+        'disaster': params.get('disaster', ''),
+        'district': params.get('district', ''),
+        'pets': params.get('pets') == 'on',
+        'barrier_free': params.get('barrier_free') == 'on',
+        'wheelchair': params.get('wheelchair') == 'on',
+        'radius': 10,
+        'latitude': '',
+        'longitude': '',
+        'all_facilities': all_facilities,
+    }
+    error = None
+    if conditions['disaster'] and conditions['disaster'] not in DISASTER_TYPES:
+        error = '災害の種類が正しくありません。'
+    districts = shelter_districts()
+
+    radius_value = params.get('radius', '')
+    if radius_value:
+        try:
+            requested_radius = int(radius_value)
+        except (TypeError, ValueError):
+            requested_radius = 10
+        if requested_radius in SEARCH_RADII:
+            conditions['radius'] = requested_radius
+
+    has_lat = params.get('latitude') not in (None, '')
+    has_lon = params.get('longitude') not in (None, '')
+    origin = None
+    if has_lat or has_lon:
+        if not has_lat or not has_lon:
+            error = '現在地の緯度と経度を両方指定してください。'
+        else:
+            origin = valid_coordinates(params.get('latitude'), params.get('longitude'))
+            if origin is None:
+                error = '現在地の座標が正しくありません。位置情報を再取得してください。'
+            else:
+                conditions['latitude'] = params.get('latitude', '')
+                conditions['longitude'] = params.get('longitude', '')
+
+    if all_facilities:
+        return list(shelters), conditions, districts, None
+    if error:
+        return [], conditions, districts, error
+
+    results = []
+    for shelter in shelters:
+        if conditions['keyword']:
+            searchable = ' '.join(
+                str(shelter.get(field) or '')
+                for field in ('name', 'district', 'address', 'location', 'description')
+            ).casefold()
+            if conditions['keyword'].casefold() not in searchable:
+                continue
+        if conditions['district'] and shelter.get('district') != conditions['district']:
+            continue
+        if conditions['disaster'] and not (
+            shelter.get('safety_confirmed') is True
+            and isinstance(shelter.get('safe_for'), list)
+            and conditions['disaster'] in shelter.get('safe_for')
+        ):
+            continue
+        if conditions['pets'] and shelter_equipment_value(shelter, 'pets_allowed') is not True:
+            continue
+        if conditions['barrier_free'] and shelter.get('barrier_free') is not True:
+            continue
+        if conditions['wheelchair'] and shelter.get('wheelchair_accessible') is not True:
+            continue
+
+        item = dict(shelter)
+        if origin is not None:
+            location = valid_coordinates(shelter.get('latitude'), shelter.get('longitude'))
+            if location is None:
+                continue
+            distance = haversine_km(origin, location)
+            if distance > conditions['radius']:
+                continue
+            item['distance_km'] = distance
+        results.append(item)
+
+    if origin is not None:
+        results.sort(key=lambda item: item['distance_km'])
+    return results, conditions, districts, None
 
 
 def prepare_shelter_results(results):
@@ -185,6 +383,17 @@ def prepare_shelter_results(results):
                 item[f'{field}_label'] = '未登録'
                 item[f'{field}_class'] = 'unknown'
 
+        item['search_pets_value'] = shelter_equipment_value(shelter, 'pets_allowed')
+        item['search_barrier_free_value'] = shelter.get('barrier_free')
+        item['search_wheelchair_value'] = shelter.get('wheelchair_accessible')
+        if shelter.get('safety_confirmed') is True and isinstance(shelter.get('safe_for'), list):
+            item['safe_for_labels'] = [
+                DISASTER_TYPES.get(code, str(code))
+                for code in shelter['safe_for']
+                if isinstance(code, str)
+            ]
+        else:
+            item['safe_for_labels'] = []
         prepared.append(item)
     return prepared
 
@@ -301,8 +510,12 @@ def get_weather_warnings():
 # トップページ：templates/index.html を返す（住民向け指示も表示する）
 @app.route('/')
 def index():
-    resident_notices = [i for i in instructions if i.get('target') == '住民']
-    return render_template('index.html', resident_notices=resident_notices)
+    resident_notices = get_public_notices()
+    return render_template(
+        'index.html',
+        resident_notices=resident_notices,
+        display_time=display_instruction_time,
+    )
 
 # ログインページ
 @app.route('/login', methods=['GET', 'POST'])
@@ -392,26 +605,246 @@ def shelter_register():
 # 避難所検索ページ
 @app.route('/shelter_search')
 def shelter_search():
-    return render_template('shelter_search.html')
+    return render_template(
+        'shelter_search.html',
+        districts=shelter_districts(),
+        facility_count=len(shelters),
+        disaster_types=DISASTER_TYPES,
+        conditions={
+            'keyword': '',
+            'disaster': '',
+            'district': '',
+            'pets': False,
+            'barrier_free': False,
+            'wheelchair': False,
+            'radius': 10,
+            'latitude': '',
+            'longitude': '',
+        },
+    )
 
 # 全施設一覧ページ
 @app.route('/all_shelters')
 def all_shelters():
-    return render_template('search_results.html', results=prepare_shelter_results(shelters))
+    results, conditions, districts, error = filter_shelter_search(
+        {},
+        all_facilities=True,
+    )
+    return render_template(
+        'search_results.html',
+        results=prepare_shelter_results(results),
+        conditions=conditions,
+        districts=districts,
+        disaster_types=DISASTER_TYPES,
+        heading='全施設一覧',
+        all_facilities=True,
+        error=error,
+        no_results_reason='',
+    )
 
 
-# 指示ボード：住民向けの指示を一覧で確認する
-@app.route('/board')
+# 指示ボード：指示の登録、対応状況の管理、発信履歴の確認を行う
+@app.route('/board', methods=['GET', 'POST'])
 @login_required
 def board():
-    resident_instructions = [i for i in instructions if i.get('target') == '住民']
-    return render_template('board.html', instructions=resident_instructions)
+    form_values = request.form.to_dict() if request.method == 'POST' else {}
+    error_message = None
+    status_code = 200
+
+    if request.method == 'POST':
+        target = request.form.get('target', '')
+        district = request.form.get('district', '')
+        shelter_name = request.form.get('shelter', '')
+        priority = request.form.get('priority', '')
+        content = request.form.get('content', '').strip()
+        easy_content = request.form.get('easy_content', '').strip()
+        shelter_names = {item.get('name') for item in shelters if item.get('name')}
+
+        if target not in INSTRUCTION_TARGETS:
+            error_message = '宛先を選択してください。'
+        elif district not in INSTRUCTION_DISTRICTS:
+            error_message = '対象地区を選択してください。'
+        elif shelter_name and shelter_name not in shelter_names:
+            error_message = '登録済みの避難先を選択してください。'
+        elif priority not in INSTRUCTION_PRIORITIES:
+            error_message = '緊急度を選択してください。'
+        elif not content:
+            error_message = '指示内容を入力してください。'
+        elif target == '住民' and not easy_content:
+            error_message = '住民向けの指示には、やさしい日本語での内容が必要です。'
+
+        if error_message:
+            status_code = 400
+        else:
+            numeric_ids = [
+                item.get('id') for item in instructions
+                if type(item.get('id')) is int and item.get('id') >= 0
+            ]
+            now = datetime.now(JST).isoformat(timespec='microseconds')
+            new_instruction = {
+                'id': max(numeric_ids, default=0) + 1,
+                'target': target,
+                'district': district,
+                'shelter': shelter_name,
+                'priority': priority,
+                'content': content,
+                'easy_content': easy_content,
+                'status': '未対応',
+                'created_at': now,
+                'updated_at': now,
+                'published_at': None,
+            }
+            previous = [dict(item) for item in instructions]
+            instructions.append(new_instruction)
+            try:
+                save_instruction_changes(previous)
+            except OSError:
+                error_message = '指示を保存できませんでした。時間をおいて再度お試しください。'
+                status_code = 500
+            else:
+                return redirect(url_for('board', notice='registered', sort='newest'))
+
+    board_instructions = list(instructions)
+    if request.args.get('sort') == 'newest':
+        board_instructions.sort(
+            key=lambda item: instruction_datetime_key(item.get('created_at')),
+            reverse=True,
+        )
+    history = get_public_notices()
+    notices = {
+        'registered': '指示を登録しました。',
+        'updated': '対応状況を更新しました。',
+        'published': '住民向け情報を発信しました。',
+    }
+    return render_template(
+        'board.html',
+        instructions=board_instructions,
+        history=history,
+        shelters=sorted(shelters, key=lambda item: item.get('name') or ''),
+        targets=INSTRUCTION_TARGETS,
+        districts=INSTRUCTION_DISTRICTS,
+        priorities=INSTRUCTION_PRIORITIES,
+        statuses=INSTRUCTION_STATUSES,
+        form_values=form_values,
+        error_message=error_message,
+        notice=notices.get(request.args.get('notice')),
+        current_time=get_japan_time(),
+        display_time=display_instruction_time,
+        get_status=get_instruction_status,
+    ), status_code
+
+
+@app.route('/instructions/<int:instruction_id>/status', methods=['POST'])
+@login_required
+def update_instruction_status(instruction_id):
+    requested_status = request.form.get('status', '')
+    if requested_status not in INSTRUCTION_STATUSES:
+        return '不正な対応状況です。', 400
+
+    instruction = next(
+        (item for item in instructions if str(item.get('id')) == str(instruction_id)),
+        None,
+    )
+    if instruction is None:
+        return '指示が見つかりません。', 404
+
+    previous = [dict(item) for item in instructions]
+    instruction['status'] = requested_status
+    instruction['updated_at'] = datetime.now(JST).isoformat(timespec='microseconds')
+    try:
+        save_instruction_changes(previous)
+    except OSError:
+        return '対応状況を保存できませんでした。時間をおいて再度お試しください。', 500
+    return redirect(url_for('board', notice='updated'))
+
+
+@app.route('/instructions/<int:instruction_id>/publish', methods=['GET', 'POST'])
+@login_required
+def publish_instruction(instruction_id):
+    instruction = next(
+        (
+            item for item in instructions
+            if str(item.get('id')) == str(instruction_id)
+            and item.get('target') == '住民'
+        ),
+        None,
+    )
+    if instruction is None:
+        return '住民向け指示が見つかりません。', 404
+
+    if request.method == 'POST':
+        if instruction.get('published_at'):
+            return redirect(url_for('publish_instruction', instruction_id=instruction_id))
+        previous = [dict(item) for item in instructions]
+        instruction['published_at'] = datetime.now(JST).isoformat(timespec='microseconds')
+        instruction['updated_at'] = instruction['published_at']
+        try:
+            save_instruction_changes(previous)
+        except OSError:
+            instruction = next(
+                item for item in instructions
+                if str(item.get('id')) == str(instruction_id)
+                and item.get('target') == '住民'
+            )
+            return render_template(
+                'publish_instruction.html',
+                instruction=instruction,
+                error_message='発信を保存できませんでした。時間をおいて再度お試しください。',
+            ), 500
+        return redirect(url_for('board', notice='published'))
+
+    return render_template('publish_instruction.html', instruction=instruction)
+
+
+@app.route('/broadcast_history')
+@login_required
+def broadcast_history():
+    return render_template(
+        'broadcast_history.html',
+        history=get_public_notices(),
+        display_time=display_instruction_time,
+    )
 
 # 検索結果ページ：templates/search_results.html を返す
 @app.route('/search_results')
 def search_results():
-    results = filter_shelters(request.args.get('district'))
-    return render_template('search_results.html', results=prepare_shelter_results(results))
+    results, conditions, districts, error = filter_shelter_search(request.args)
+    has_condition = any((
+        conditions['keyword'],
+        conditions['disaster'],
+        conditions['district'],
+        conditions['pets'],
+        conditions['barrier_free'],
+        conditions['wheelchair'],
+        conditions['latitude'],
+    ))
+    no_results_reason = ''
+    if not results and error is None:
+        if conditions['latitude']:
+            no_results_reason = (
+                '指定した範囲内に条件を満たす避難所がありません。'
+                '座標が未登録の施設は現在地検索に表示できません。'
+            )
+        elif conditions['disaster'] or conditions['pets'] or conditions['barrier_free'] or conditions['wheelchair']:
+            no_results_reason = (
+                '条件を満たす施設がありません。安全性や設備が未確認の施設は、'
+                '条件付き検索には含めていません。'
+            )
+        elif has_condition:
+            no_results_reason = 'キーワードや検索条件を変更して、もう一度お試しください。'
+        else:
+            no_results_reason = '現在、登録されている避難所はありません。'
+    return render_template(
+        'search_results.html',
+        results=prepare_shelter_results(results),
+        conditions=conditions,
+        districts=districts,
+        disaster_types=DISASTER_TYPES,
+        heading='検索結果',
+        all_facilities=False,
+        error=error,
+        no_results_reason=no_results_reason,
+    ), 400 if error else 200
 
 # JSON API：/shelters?district=地区名
 @app.route('/shelters', methods=['GET'])

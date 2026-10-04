@@ -123,8 +123,8 @@ class ShelterRegisterTest(unittest.TestCase):
             body = response.get_data(as_text=True)
 
             self.assertEqual(response.status_code, 200)
-            self.assertIn('<table class="shelter-results">', body)
-            self.assertIn("避難所名", body)
+            self.assertIn('class="shelter-result"', body)
+            self.assertIn("御所見小学校", body)
             self.assertIn("住所", body)
             self.assertIn("開設状況", body)
             self.assertIn("藤沢市用田", body)
@@ -171,8 +171,8 @@ class ShelterRegisterTest(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertIn("availability-unknown", body)
-            self.assertIn("収容人数</th>", body)
-            self.assertIn("現在の避難者数</th>", body)
+            self.assertIn("収容人数", body)
+            self.assertIn("現在の避難者数", body)
             self.assertIn("facility-unknown", body)
             self.assertIn("facility-yes", body)
         finally:
@@ -187,10 +187,9 @@ class ShelterRegisterTest(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertIn('role="status"', body)
-            self.assertIn("条件に合う避難所がありません", body)
+            self.assertIn("該当する避難所が見つかりません", body)
             self.assertIn("検索条件を変更して、もう一度お試しください。", body)
-            self.assertIn('class="search-again" href="/shelter_search"', body)
-            self.assertIn("条件を変えて再検索", body)
+            self.assertIn('href="/shelter_search">検索条件をクリア</a>', body)
             self.assertNotIn("片瀬小学校", body)
         finally:
             app_module.shelters = original_shelters

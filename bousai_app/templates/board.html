@@ -2,24 +2,266 @@
 
 {% block title %}指示・発信ボード - 防災アプリ{% endblock %}
 
-{% block content %}
-<h2>発信ボード</h2>
-<p>住民向けの発信を登録・確認できます。</p>
+{% block head %}
+<style>
+  .board-section,
+  .instruction-card {
+    margin: 0 0 24px;
+    padding: 22px;
+    border: 1px solid #dce3eb;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .board-form,
+  .instruction-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .board-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 700;
+  }
+  .board-form input,
+  .board-form select,
+  .board-form textarea,
+  .status-form select {
+    width: 100%;
+    min-height: 42px;
+    padding: 8px;
+    border: 1px solid #aebaca;
+    border-radius: 6px;
+    font: inherit;
+  }
+  .board-form textarea {
+    min-height: 100px;
+    resize: vertical;
+  }
+  .field-wide {
+    grid-column: 1 / -1;
+  }
+  .board-button,
+  .board-link {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    border: 1px solid #2856a4;
+    border-radius: 7px;
+    color: #fff;
+    background: #2856a4;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .board-link-secondary {
+    color: #2856a4;
+    background: #fff;
+  }
+  .board-button:focus-visible,
+  .board-link:focus-visible,
+  .board-form :focus-visible,
+  .status-form :focus-visible {
+    outline: 3px solid rgb(40 86 164 / 30%);
+    outline-offset: 2px;
+  }
+  .board-error,
+  .board-notice {
+    padding: 12px;
+    border-radius: 7px;
+  }
+  .board-error {
+    color: #8b1e1e;
+    background: #fde8e7;
+  }
+  .board-notice {
+    color: #17603a;
+    background: #e2f5e9;
+  }
+  .instruction-card h4 {
+    margin: 0 0 12px;
+  }
+  .instruction-meta {
+    margin: 0 0 12px;
+  }
+  .instruction-meta div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .instruction-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .priority-high {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #8b1e1e;
+    background: #fde8e7;
+    font-weight: 700;
+  }
+  .status-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .status-form select {
+    width: auto;
+    min-width: 130px;
+  }
+  .board-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 600px) {
+    .board-section,
+    .instruction-card {
+      padding: 16px;
+    }
+    .board-form,
+    .instruction-meta {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
 
-<!-- 発信一覧 -->
-<h3>発信一覧</h3>
-{% if instructions %}
-<table border="1" cellpadding="5">
-  <tr>
-    <th>内容</th>
-  </tr>
-  {% for inst in instructions %}
-  <tr>
-    <td>{{ inst.content }}{% if inst.shelter %}（避難先: {{ inst.shelter }}）{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>登録されている指示はありません。</p>
+{% block content %}
+<h2>指示・発信ボード</h2>
+<p>指示の登録、対応状況の管理、住民向け情報の発信を行います。</p>
+
+<div class="board-links">
+  <a class="board-link board-link-secondary" href="{{ url_for('broadcast_history') }}">発信履歴を見る</a>
+</div>
+
+{% if notice %}
+  <p class="board-notice" role="status">{{ notice }}</p>
 {% endif %}
+{% if error_message %}
+  <p class="board-error" role="alert">{{ error_message }}</p>
+{% endif %}
+
+<section class="board-section" aria-labelledby="register-heading">
+  <h3 id="register-heading">指示を登録</h3>
+  <p>登録日時（サーバー時刻）: <time>{{ current_time }}</time></p>
+  <form class="board-form" method="post" action="{{ url_for('board') }}">
+    <div>
+      <label for="target">宛先（必須）</label>
+      <select id="target" name="target" required>
+        <option value="">選択してください</option>
+        {% for target in targets %}
+          <option value="{{ target }}" {% if form_values.get('target') == target %}selected{% endif %}>{{ '道路管理課（道路管理部署）' if target == '道路管理課' else target }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="district">対象地区（必須）</label>
+      <select id="district" name="district" required>
+        <option value="">選択してください</option>
+        {% for district in districts %}
+          <option value="{{ district }}" {% if form_values.get('district') == district %}selected{% endif %}>{{ district }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="shelter">避難先（任意）</label>
+      <select id="shelter" name="shelter">
+        <option value="">指定なし</option>
+        {% for shelter in shelters %}
+          <option value="{{ shelter.name }}" {% if form_values.get('shelter') == shelter.name %}selected{% endif %}>{{ shelter.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="priority">緊急度（必須）</label>
+      <select id="priority" name="priority" required>
+        <option value="">選択してください</option>
+        {% for priority in priorities %}
+          <option value="{{ priority }}" {% if form_values.get('priority') == priority %}selected{% endif %}>{{ priority }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-wide">
+      <label for="content">指示内容（必須）</label>
+      <textarea id="content" name="content" required>{{ form_values.get('content', '') }}</textarea>
+    </div>
+    <div class="field-wide">
+      <label for="easy_content">やさしい日本語での内容（住民向けの場合は必須）</label>
+      <textarea id="easy_content" name="easy_content">{{ form_values.get('easy_content', '') }}</textarea>
+    </div>
+    <div class="field-wide">
+      <button class="board-button" type="submit">指示を登録</button>
+    </div>
+  </form>
+</section>
+
+<section aria-labelledby="instructions-heading">
+  <h3 id="instructions-heading">指示一覧</h3>
+  <form method="get" action="{{ url_for('board') }}">
+    <button class="board-button" type="submit" name="sort" value="newest">新しい順に並び替え</button>
+  </form>
+  {% if instructions %}
+    {% for inst in instructions %}
+      <article class="instruction-card">
+        <h4>指示 #{{ inst.id }} — 宛先: {{ inst.target or '未設定' }}</h4>
+        <dl class="instruction-meta">
+          <div><dt>対象地区</dt><dd>{{ inst.district or '未設定' }}</dd></div>
+          <div><dt>登録日時</dt><dd><time>{{ display_time(inst.created_at) }}</time></dd></div>
+          <div>
+            <dt>緊急度</dt>
+            <dd>{% if inst.priority == '高' %}<span class="priority-high">高</span>{% else %}{{ inst.priority or '未設定' }}{% endif %}</dd>
+          </div>
+          <div><dt>対応状況</dt><dd>{{ get_status(inst) }}</dd></div>
+          <div><dt>避難先</dt><dd>{{ inst.shelter or '指定なし' }}</dd></div>
+          <div>
+            <dt>住民への発信</dt>
+            <dd>{% if inst.published_at %}発信済み（{{ display_time(inst.published_at) }}）{% else %}未発信{% endif %}</dd>
+          </div>
+        </dl>
+        <p class="instruction-content"><strong>内容:</strong> {{ inst.content or '未登録' }}</p>
+        {% if inst.easy_content %}
+          <p class="instruction-content"><strong>やさしい日本語:</strong> {{ inst.easy_content }}</p>
+        {% endif %}
+        <form class="status-form" method="post" action="{{ url_for('update_instruction_status', instruction_id=inst.id) }}">
+          <label for="status-{{ inst.id }}">対応状況</label>
+          <select id="status-{{ inst.id }}" name="status" required>
+            {% for status in statuses %}
+              <option value="{{ status }}" {% if get_status(inst) == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+          <button class="board-button" type="submit">状況を更新</button>
+        </form>
+        {% if inst.target == '住民' %}
+          <p>
+            <a class="board-link board-link-secondary" href="{{ url_for('publish_instruction', instruction_id=inst.id) }}">
+              {% if inst.published_at %}発信内容を確認{% else %}内容を確認して発信{% endif %}
+            </a>
+          </p>
+        {% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p>登録されている指示はありません。</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="history-heading">
+  <h3 id="history-heading">発信履歴</h3>
+  {% if history %}
+    <ul>
+      {% for inst in history %}
+        <li><time>{{ display_time(inst.published_at) }}</time> — {{ inst.district or '未設定' }}：{{ inst.content or '未登録' }}（避難先: {{ inst.shelter or '指定なし' }}）</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>発信履歴はありません。</p>
+  {% endif %}
+</section>
 {% endblock %}
